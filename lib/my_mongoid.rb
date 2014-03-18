@@ -13,6 +13,7 @@ module MyMongoid
     def initialize(attributes)
       raise ArgumentError unless attributes.is_a?(Hash)
       self.attributes = attributes
+      process_defualt_value
     end
 
     def attributes
@@ -40,16 +41,26 @@ module MyMongoid
 
     alias_method :attributes=, :process_attributes
 
+    def process_defualt_value
+      self.class.fields.each do |name, field|
+        send("#{field.name}=", field.options[:default]) if field.options[:default]
+      end
+    end
+
     module ClassMethods
       def is_mongoid_model?
         true
       end
 
-      def field(name, options = nil)
+      def field(name, options = {})
         name = name.to_s
-        define_field(name)
+        field = Field.new(name, options)
+
+        define_field(field)
+        
         alias_field options[:as], name if options && options[:as]
-        fields[name] = Field.new(name, options)
+
+        fields[name] = field
       end
 
       def fields
@@ -67,15 +78,16 @@ module MyMongoid
         self.fields.keys.include?(field_name)
       end
 
-      def define_field(name)
-        raise DuplicateFieldError if field_defined?(name)
+      def define_field(field)
+        raise DuplicateFieldError if field_defined?(field.name)
 
-        define_method(name) do
-          attributes[name.to_s]
+        define_method(field.name) do
+          attributes[field.name.to_s]
         end
 
-        define_method("#{name}=") do |value|
-          attributes[name] = value
+        define_method("#{field.name}=") do |value|
+          raise StandardError if field.options[:type] && !value.is_a?(field.options[:type])
+          attributes[field.name.to_s] = value
         end
       end
     end
